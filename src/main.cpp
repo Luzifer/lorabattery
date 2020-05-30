@@ -3,7 +3,7 @@
 #include <TTN_esp32.h>
 #include "heltec.h"
 
-#include "config.h"
+#include "config.hh"
 #include "main.hh"
 #include "math.hh"
 
