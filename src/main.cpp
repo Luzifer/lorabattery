@@ -1,14 +1,18 @@
+#include <cmath>
+
 #include <TTN_esp32.h>
 #include "heltec.h"
+
 #include "config.h"
-#include "main.h"
+#include "main.hh"
+#include "math.hh"
 
 TTN_esp32 ttn;
 
 void loop() {
   // Read voltage and add as uint8 to transmission
   float voltage = readVoltage();
-  uint8_t payload = (uint8_t)(int)(voltage * 10);
+  uint8_t payload = (uint8_t)(int)(round(voltage * 10));
 
   if (ENABLE_SEND) {
     sendVoltage(payload);
@@ -35,14 +39,31 @@ void loop() {
 float readVoltage() {
   Serial.println("Reading voltage...");
 
-  int rawSum = 0;
-  for (int i = 0; i < MEAS_COUNT; i++) {
-    rawSum += analogRead(PIN_VOLTAGE_READ);
-    delay(MEAS_WAIT_MS);
+  int rawValues[MEAS_COUNT], sum;
+  float rawSum = 0.0, dev = 9, mean;
+
+  while (dev > 2) {
+    sum = 0;
+
+    for (int i = 0; i < MEAS_COUNT; i++) {
+      rawValues[i] = analogRead(PIN_VOLTAGE_READ);
+      sum += rawValues[i];
+    }
+
+    dev = deviation(rawValues, MEAS_COUNT);
+    mean = sum / MEAS_COUNT;
   }
 
-  float raw = rawSum / float(MEAS_COUNT);
-  float vout = raw * 3.3 / 4094.0;
+  int count = 0;
+  for (int i = 0; i < MEAS_COUNT; i++) {
+    if (rawValues[i] >= mean - dev && rawValues[i] <= mean + dev) {
+      rawSum += rawValues[i];
+      count++;
+    }
+  }
+
+  float raw = rawSum / count;
+  float vout = raw * 3.3 / 1024;
   float value = vout / (7500.0 / (30000.0 + 7500.0)) + CORRECT_DIFF;
 
   Serial.printf("Voltage read: %.1f %.2f\r\n", raw, value);
@@ -67,7 +88,7 @@ void sendVoltage(uint8_t payload) {
 void setup() {
   Heltec.begin(true /* DisplayEnable */, false /* LoRaEnable */, true /* SerialEnable */, false /* PABOOST */, BAND /* long BAND */);
 
-  analogReadResolution(12);
+  analogReadResolution(10);
 
   // Initialize display for usage
   Heltec.display->init();
